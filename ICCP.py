@@ -17,6 +17,7 @@
 #   and translation norm per iteration.
 #
 # Run this cell to execute the demo and observe results.
+# 不带旋转变换的ICCP算法
 
 import numpy as np
 import matplotlib.pyplot as plt

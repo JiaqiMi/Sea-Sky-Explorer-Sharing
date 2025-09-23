@@ -59,6 +59,7 @@ dgdy_interp = RegularGridInterpolator((xs, ys), dy.T, bounds_error=False, fill_v
 
 # --- True trajectory (2D) ---
 # We'll create a smooth path that traverses the anomalies: a sinusoidal track.
+# 核心思路：通过预设轨迹反解速度和加速度
 speed = 2.0  # m/s approximately constant speed
 total_length = speed * T
 # Parametric path: circle-like + sine modulation
@@ -85,10 +86,10 @@ true_ay = np.gradient(true_vy, dt)
 # Accelerometer measures body-frame specific force: f_b = C_nb^T * (a_nav - g_nav) + accel_bias + noise
 # For planar motion, a_nav = [ax, ay, 0], g_nav = [0, 0, -(g0 + anom)], so a_nav - g_nav = [ax, ay, g0+anom].
 # Accelerometer senses the "upward" specific force component as positive z in body frame.
-accel_noise_std = 0.02  # m/s^2 (accelerometer noise)
-gyro_noise_std = 0.001  # rad/s
-accel_bias_true = np.array([0.02, -0.01, 0.0])  # small bias in body frame (x,y,z)
-gyro_bias_true = 0.002  # rad/s yaw bias
+accel_noise_std = 0.02 * 1 # m/s^2 (accelerometer noise)
+gyro_noise_std = 0.001 * 1 # rad/s
+accel_bias_true = np.array([0.02*1, -0.01*1, 0.0])  # small bias in body frame (x,y,z)
+gyro_bias_true = 0.002 * 1 # rad/s yaw bias
 
 # For simplicity, we simulate only x,y accel components in body frame and treat vertical as a scalar
 # But we'll produce 3-axis accel for mechanization consistency.
@@ -133,8 +134,8 @@ ins_vy = np.zeros(steps)
 ins_yaw = np.zeros(steps)
 
 # Start at a perturbed initial position
-ins_x[0] = true_x[0] + 5.0   # 5 m initial horizontal error
-ins_y[0] = true_y[0] - 3.0   # 3 m initial error
+ins_x[0] = true_x[0] + 5.0 * 0.01  # 5 m initial horizontal error
+ins_y[0] = true_y[0] - 3.0 * 0.01  # 3 m initial error
 ins_vx[0] = true_vx[0]
 ins_vy[0] = true_vy[0]
 ins_yaw[0] = true_yaw[0] + 0.05  # small heading error
@@ -188,7 +189,7 @@ q_bgrav = (1e-7)**2
 Q = np.diag([q_pos, q_pos, q_vel, q_vel, q_theta, q_ba, q_ba, q_bgrav])
 
 # Measurement noise R for gravimeter (variance)
-R_grav = grav_noise_std**2 + (1e-6)**2  # include some map uncertainty
+R_grav = (grav_noise_std**2 + (1e-6)**2)*100  # include some map uncertainty
 
 # We'll perform filter in discrete-time with linearized F computed at each step
 # For convenience, we will maintain a "corrected" INS state which applies the estimated error-state to INS solution
@@ -203,7 +204,7 @@ corr_x[0] = ins_x[0] - x_est[0, 0]
 corr_y[0] = ins_y[0] - x_est[0, 1]
 corr_vx[0] = ins_vx[0] - x_est[0, 2]
 corr_vy[0] = ins_vy[0] - x_est[0, 3]
-corr_yaw[0] = ins_y[0] - x_est[0, 4]
+corr_yaw[0] = ins_yaw[0] - x_est[0, 4]
 
 # measurement rate: assume gravimeter at 1 Hz
 meas_interval_steps = int(1.0 / dt)
@@ -290,8 +291,10 @@ for k in range(1, steps):
 
         # Build H: measurement depends on position error (dx,dy) and gravimeter bias bgrav
         H = np.zeros((1, nx))
-        H[0, 0] = grad[0]  # ∂g/∂x * dx
-        H[0, 1] = grad[1]  # ∂g/∂y * dy
+        # H[0, 0] = grad[0]  # ∂g/∂x * dx
+        # H[0, 1] = grad[1]  # ∂g/∂y * dy
+        H[0, 0] = -grad[0]
+        H[0, 1] = -grad[1]
         # rest zeros except grav bias
         H[0, 7] = 1.0      # measurement includes grav bias additively (we included bgrav in state)
 
@@ -307,11 +310,16 @@ for k in range(1, steps):
 
         # apply correction to nominal INS state (inject error state)
         # corrected nominal = nominal - estimated error (error-state definition depends; here x stores INS - true so -x corrects)
-        corr_x[k] = corr_x[k] - x_upd[0]
-        corr_y[k] = corr_y[k] - x_upd[1]
-        corr_vx[k] = corr_vx[k] - x_upd[2]
-        corr_vy[k] = corr_vy[k] - x_upd[3]
-        corr_yaw[k] = corr_yaw[k] - x_upd[4]
+        # corr_x[k] = corr_x[k] - x_upd[0]
+        # corr_y[k] = corr_y[k] - x_upd[1]
+        # corr_vx[k] = corr_vx[k] - x_upd[2]
+        # corr_vy[k] = corr_vy[k] - x_upd[3]
+        # corr_yaw[k] = corr_yaw[k] - x_upd[4]
+        corr_x[k] = ins_x[k] - x_upd[0]
+        corr_y[k] = ins_y[k] - x_upd[1]
+        corr_vx[k] = ins_vx[k] - x_upd[2]
+        corr_vy[k] = ins_vy[k] - x_upd[3]
+        corr_yaw[k] = ins_yaw[k] - x_upd[4]
         # Reset error-state after injection to zero (typical error-state approach: set state to zero after applying)
         x_est[k] = np.zeros(nx)
         P[k] = P_upd
