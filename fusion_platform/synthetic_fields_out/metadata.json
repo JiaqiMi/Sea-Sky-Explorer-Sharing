@@ -1,0 +1,13 @@
+{
+  "grid": {
+    "H": 512,
+    "W": 512,
+    "dx_km": 0.5
+  },
+  "units": {
+    "terrain": "m (depth, negative means deeper)",
+    "gravity": "mGal (free-air anomaly)",
+    "magnetic": "nT (total field anomaly)"
+  },
+  "notes": "Synthetic fields for Geo Fusion IDE. Values approximate marine magnitudes."
+}
